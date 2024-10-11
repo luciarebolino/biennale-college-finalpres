@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lucia Rebolino</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+        #toggleButton, #rotateButton, #playButton, #pauseButton, #insideButton, #unfoldButton, #fadeButton {
+            position: absolute;
+            top: 20px;
+            padding: 10px 20px;
+            background-color: #000000;
+            font-family: Arial, Helvetica, sans-serif;
+            color: #fff;
+            font-size: 20px;
+            border: none;
+            cursor: pointer;
+            z-index: 1;
+            margin: 10px;
+        }
+        #rotateButton { left: 150px; }
+        #toggleButton { left: 900px; }
+        #playButton { left: 190px; }
+        #pauseButton { left: 370px; }
+        #insideButton { left: 540px; }
+        #unfoldButton { left: 670px; }
+        #fadeButton { left: 800px; }
+        video { display: none; } /* Hide video element */
+    </style>
+</head>
+<body>
+    <button id="toggleButton">1</button>
+    <button id="rotateButton">3</button>
+    <button id="playButton">UNPREDICTABLE </button>
+    <button id="pauseButton">ATMOSPHERE </button>
+    <button id="insideButton">4</button>
+    <button id="unfoldButton">5</button>
+    <button id="fadeButton">2</button>
+
+    <!-- Video elements to use as textures -->
+    <video id="video1" loop muted crossOrigin="anonymous" playsinline>
+        <source src="videos/v1.mp4" type="video/mp4">
+    </video>
+    <video id="video2" loop muted crossOrigin="anonymous" playsinline>
+        <source src="videos/v2.mp4" type="video/mp4">
+    </video>
+    <video id="video3" loop muted crossOrigin="anonymous" playsinline>
+        <source src="videos/v3.mp4" type="video/mp4">
+    </video>
+    <video id="video4" loop muted crossOrigin="anonymous" playsinline>
+        <source src="videos/v5.mp4" type="video/mp4">
+    </video>
+    <video id="video5" loop muted crossOrigin="anonymous" playsinline>
+        <source src="videos/v4.mp4" type="video/mp4">
+    </video>
+    <video id="video6" loop muted crossOrigin="anonymous" playsinline>
+        <source src="videos/BALL.mp4" type="video/mp4">
+    </video>
+    <video id="video7" loop muted crossOrigin="anonymous" playsinline>
+        <source src="videos/a.mp4" type="video/mp4">
+    </video>
+    <video id="video8" loop muted crossOrigin="anonymous" playsinline>
+        <source src="videos/c.mp4" type="video/mp4">
+    </video>
+    <video id="video9" loop muted crossOrigin="anonymous" playsinline>
+        <source src="videos/d.mp4" type="video/mp4">
+    </video>
+    <video id="video10" loop muted crossOrigin="anonymous" playsinline>
+        <source src="videos/e.mp4" type="video/mp4">
+    </video>
+    <video id="video11" loop muted crossOrigin="anonymous" playsinline>
+        <source src="videos/sky.mp4" type="video/mp4">
+    </video>
+    <!-- Include Three.js -->
+    <script type="module">
+        import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.151.3/build/three.module.js';
+
+        // Scene, Camera, Renderer
+        const scene = new THREE.Scene();
+
+        // Calculate aspect ratio
+        const aspect = window.innerWidth / window.innerHeight;
+        const cameraSize = 2.5;
+
+        // Create an Orthographic Camera for isometric view
+        const orthographicCamera = new THREE.OrthographicCamera(
+            -cameraSize * aspect, // left
+            cameraSize * aspect,  // right
+            cameraSize,           // top
+            -cameraSize,          // bottom
+            0.1,                  // near
+            1000                  // far
+        );
+
+        // Create a Perspective Camera for the final zoom-out
+        const perspectiveCamera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
+        perspectiveCamera.position.set(0, 0, 5);
+        perspectiveCamera.lookAt(0, 0, 0);
+
+        let currentCamera = orthographicCamera; // Start with orthographic camera
+
+        // Set isometric camera position and orientation
+        orthographicCamera.position.set(3, 3, 3);
+        orthographicCamera.lookAt(0, 0, 0);
+        orthographicCamera.zoom = 1;
+        orthographicCamera.updateProjectionMatrix();
+
+        // Define positions, rotations, and FOV for transitions
+        const topDownPosition = new THREE.Vector3(0, 8, 0);
+        const topDownQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+        const axonometricPosition = new THREE.Vector3(3, 3, 3);
+        const axonometricQuaternion = new THREE.Quaternion().copy(orthographicCamera.quaternion);
+        const insideCubePosition = new THREE.Vector3(0, 0, 0);
+        const insideCubeQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+        const defaultFOV = 50;
+        const insideFOV = 90;
+        const finalFOV = 110; // FOV for the final zoom-out effect
+
+        let isTopDownView = false;
+        let isInsideView = false;
+        let isTransitioning = false;
+        let isImmersiveView = false;
+        let isFinalMovement = false;
+        let transitionProgress = 0;
+        let immersiveTransitionProgress = 0;
+        let finalMovementProgress = 0;
+        let isRotating = false;
+        let isUnfolding = false;
+        let unfoldProgress = 0;
+        let transitionType = null;
+
+        let isDragging = false;
+        let startDragX = 0;
+        let dragOffsetX = 0;
+
+        let isFading = false;
+        let fadeProgress = 0;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Load video elements
+        const video1 = document.getElementById('video1');
+const video2 = document.getElementById('video2');
+const video3 = document.getElementById('video3');
+const video4 = document.getElementById('video4');
+const video5 = document.getElementById('video5');
+const video6 = document.getElementById('video6');
+const video7 = document.getElementById('video7');
+const video8 = document.getElementById('video8');
+const video9 = document.getElementById('video9');
+const video10 = document.getElementById('video10');
+const video11 = document.getElementById('video11');
+ 
+
+        // Create video textures
+        const videoTexture1 = new THREE.VideoTexture(video1);
+        const videoTexture2 = new THREE.VideoTexture(video2);
+        const videoTexture3 = new THREE.VideoTexture(video3);
+        const videoTexture4 = new THREE.VideoTexture(video4);
+        const videoTexture5 = new THREE.VideoTexture(video5);
+        const videoTexture6 = new THREE.VideoTexture(video6);
+        const videoTexture7 = new THREE.VideoTexture(video7);
+        const videoTexture8 = new THREE.VideoTexture(video8);
+        const videoTexture9 = new THREE.VideoTexture(video9);
+        const videoTexture10 = new THREE.VideoTexture(video10);
+        const videoTexture11 = new THREE.VideoTexture(video11);
+
+
+
+
+// Create materials for the outer and inner faces of the cube with transparency
+const outerMaterials = [
+    new THREE.MeshBasicMaterial({ map: videoTexture1, side: THREE.DoubleSide, transparent: true, opacity: 1 }), // Front
+    new THREE.MeshBasicMaterial({ map: videoTexture2, side: THREE.DoubleSide, transparent: true, opacity: 1 }), // Back
+    new THREE.MeshBasicMaterial({ map: videoTexture3, side: THREE.DoubleSide, transparent: true, opacity: 1 }), // Left
+    new THREE.MeshBasicMaterial({ map: videoTexture5, side: THREE.DoubleSide, transparent: true, opacity: 1 }), // Right
+    new THREE.MeshBasicMaterial({ map: videoTexture6, side: THREE.DoubleSide, transparent: true, opacity: 1 }), // Top
+    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 })
+
+];
+
+const innerMaterials = [
+    new THREE.MeshBasicMaterial({ map: videoTexture9, side: THREE.DoubleSide, transparent: true, opacity: 1 }), // Front inner
+    new THREE.MeshBasicMaterial({ map: videoTexture10, side: THREE.DoubleSide, transparent: true, opacity: 1 }), // Back inner
+    new THREE.MeshBasicMaterial({ map: videoTexture9, side: THREE.DoubleSide, transparent: true, opacity: 1 }), // Left inner
+    new THREE.MeshBasicMaterial({ map: videoTexture8, side: THREE.DoubleSide, transparent: true, opacity: 1 }), // Right inner
+    new THREE.MeshBasicMaterial({ map: videoTexture11, side: THREE.DoubleSide, transparent: true, opacity: 0.5 }), // Top inner
+    // new THREE.MeshBasicMaterial({ map: videoTexture11, side: THREE.DoubleSide, transparent: true, opacity: 0})  // Bottom inner
+];
+
+// videoTexture5.needsUpdate = true;
+// videoTexture6.needsUpdate = true;
+video1.play();
+video2.play();
+video3.play();
+video4.play();
+video5.play();
+video6.play();
+video7.play();
+video8.play();
+video9.play();
+video10.play();
+video11.play();
+// Create a group to hold individual cube faces
+const cubeGroup = new THREE.Group();
+scene.add(cubeGroup);
+
+// Create each face of the cube as an individual mesh
+const cubeSize = 3;
+const faceGeometries = [
+    new THREE.PlaneGeometry(cubeSize, cubeSize),
+    new THREE.PlaneGeometry(cubeSize, cubeSize),
+    new THREE.PlaneGeometry(cubeSize, cubeSize),
+    new THREE.PlaneGeometry(cubeSize, cubeSize),
+    new THREE.PlaneGeometry(cubeSize, cubeSize),
+    new THREE.PlaneGeometry(cubeSize, cubeSize)
+];
+
+const facePositions = [
+    { position: [0, 0, cubeSize / 2], rotation: [0, 0, 0] },          // Front
+    { position: [0, 0, -cubeSize / 2], rotation: [0, Math.PI, 0] },   // Back
+    { position: [-cubeSize / 2, 0, 0], rotation: [0, Math.PI / 2, 0] }, // Left
+    { position: [cubeSize / 2, 0, 0], rotation: [0, -Math.PI / 2, 0] }, // Right
+    { position: [0, cubeSize / 2, 0], rotation: [Math.PI / 2, 0, 0] },  // Top
+    { position: [0, -cubeSize / 2, 0], rotation: [-Math.PI / 2, 0, 0] } // Bottom
+];
+
+faceGeometries.forEach((geometry, i) => {
+    const outerFaceMesh = new THREE.Mesh(geometry, outerMaterials[i]);
+    const innerFaceMesh = new THREE.Mesh(geometry, innerMaterials[i]);
+
+    // Position and rotate outer faces
+    const { position, rotation } = facePositions[i];
+    outerFaceMesh.position.set(...position);
+    outerFaceMesh.rotation.set(...rotation);
+
+    // Position and rotate inner faces
+    innerFaceMesh.position.set(...position);
+    innerFaceMesh.rotation.set(...rotation);
+    innerFaceMesh.scale.set(-1, 1, 1); // Flip the inner faces to point inwards
+
+    cubeGroup.add(outerFaceMesh);
+    cubeGroup.add(innerFaceMesh);
+
+    // Add wireframe to each face
+    const wireframe = new THREE.LineSegments(
+        new THREE.EdgesGeometry(geometry),
+        new THREE.LineBasicMaterial({ color: 0x00ff00 })
+    );
+    outerFaceMesh.add(wireframe);
+    innerFaceMesh.add(wireframe.clone());
+});
+
+
+
+
+ 
+
+
+
+        // Create a Group for Smaller Wireframe Cubes (Dense Mesh Effect)
+        const meshGroup = new THREE.Group();
+        const gridSize = 10;
+        const smallCubeSize = cubeSize / gridSize;
+
+        const smallGeometry = new THREE.BoxGeometry(smallCubeSize, smallCubeSize, smallCubeSize);
+        const wireframeMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+
+        for (let x = 0; x < gridSize; x++) {
+            for (let y = 0; y < gridSize; y++) {
+                for (let z = 0; z < gridSize; z++) {
+                    if (x === 0 || x === gridSize - 1 || y === 0 || y === gridSize - 1 || z === 0 || z === gridSize - 1) {
+                        const smallWireframe = new THREE.LineSegments(
+                            new THREE.EdgesGeometry(smallGeometry),
+                            wireframeMaterial
+                        );
+                        smallWireframe.position.set(
+                            (x - gridSize / 2 + 0.5) * smallCubeSize,
+                            (y - gridSize / 2 + 0.5) * smallCubeSize,
+                            (z - gridSize / 2 + 0.5) * smallCubeSize
+                        );
+                        meshGroup.add(smallWireframe);
+                    }
+                }
+            }
+        }
+
+        // Add the mesh group to the main scene
+        scene.add(meshGroup);
+
+
+
+
+
+// Array of image paths to use as textures
+const imageSources = [
+    'images/1.png',
+    'images/2.png',
+    'images/3.png'
+];
+
+let scrollOffset = 0;
+const scrollSpeed = 0.01; // Adjust scroll speed
+const imageGroup = new THREE.Group();
+scene.add(imageGroup);
+
+// Function to add images to the plane
+function addImagePlanes() {
+    const textureLoader = new THREE.TextureLoader();
+    
+    imageSources.forEach((source, index) => {
+        const texture = textureLoader.load(source);
+        const planeGeometry = new THREE.PlaneGeometry(cubeSize, cubeSize);
+        const planeMaterial = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+        const planeMesh = new THREE.Mesh(planeGeometry, planeMaterial);
+        
+        // Position the planes stacked on the z-axis
+        planeMesh.position.set(0, -cubeSize / 2, -index * (cubeSize + 0.5)); // Adjust the spacing with `cubeSize + 0.5`
+        planeMesh.rotation.x = -Math.PI / 2; // Lay flat on the ground
+        
+        imageGroup.add(planeMesh);
+    });
+}
+// Call the function to add image planes
+addImagePlanes();
+
+// Scroll event listener to move the image planes
+window.addEventListener('wheel', (event) => {
+    const delta = event.deltaY;
+    scrollOffset += delta * scrollSpeed;
+
+    // Update the position of the group to simulate scrolling
+    imageGroup.position.z = scrollOffset;
+});
+
+
+
+
+
+
+
+
+        // Animation Loop with Rotation
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (isRotating) {
+                cubeGroup.rotation.y += 0.005;
+                meshGroup.rotation.y += 0.005;
+            }
+
+            if (isTransitioning) {
+                transitionProgress += 0.01; // Slightly faster transition for smoother effect
+
+                if (transitionProgress >= 1) {
+                    transitionProgress = 1;
+                    isTransitioning = false; // Stop the transition
+
+                    // Ensure the camera is exactly at the target position and orientation
+                    if (transitionType === 'topDown') {
+                        if (isTopDownView) {
+                            orthographicCamera.position.copy(topDownPosition);
+                            orthographicCamera.quaternion.copy(topDownQuaternion);
+                        } else {
+                            orthographicCamera.position.copy(axonometricPosition);
+                            orthographicCamera.quaternion.copy(axonometricQuaternion);
+                        }
+                    }
+                }
+
+                const easedProgress = transitionProgress * (2 - transitionProgress);
+
+                // Handle different transition types
+                if (transitionType === 'topDown') {
+                    if (isTopDownView) {
+                        orthographicCamera.position.lerpVectors(axonometricPosition, topDownPosition, easedProgress);
+                        orthographicCamera.quaternion.slerpQuaternions(axonometricQuaternion, topDownQuaternion, easedProgress);
+                    } else {
+                        orthographicCamera.position.lerpVectors(topDownPosition, axonometricPosition, easedProgress);
+                        orthographicCamera.quaternion.slerpQuaternions(topDownQuaternion, axonometricQuaternion, easedProgress);
+                    }
+                } else if (transitionType === 'insideCube') {
+                    const targetFOV = isInsideView ? insideFOV : defaultFOV;
+                    perspectiveCamera.fov += (targetFOV - perspectiveCamera.fov) * 0.05;
+                    perspectiveCamera.updateProjectionMatrix();
+
+                    if (isInsideView) {
+                        perspectiveCamera.position.lerpVectors(axonometricPosition, insideCubePosition, easedProgress);
+                        perspectiveCamera.quaternion.slerpQuaternions(axonometricQuaternion, insideCubeQuaternion, easedProgress);
+                    } else {
+                        perspectiveCamera.position.lerpVectors(insideCubePosition, axonometricPosition, easedProgress);
+                        perspectiveCamera.quaternion.slerpQuaternions(insideCubeQuaternion, axonometricQuaternion, easedProgress);
+                    }
+                }
+            }
+
+            // Unfolding Effect
+            if (isUnfolding) {
+                unfoldProgress += 0.01;
+                if (unfoldProgress >= 1) {
+                    unfoldProgress = 1; // Cap the progress at 1
+                }
+
+                // Flip only the front and back faces (indices 0 and 1)
+                cubeGroup.children[0].rotation.y = unfoldProgress * Math.PI; // Front face
+                cubeGroup.children[1].rotation.y = unfoldProgress * Math.PI; // Back face
+                cubeGroup.children[2].rotation.y = unfoldProgress * Math.PI; // Front face
+                cubeGroup.children[3].rotation.y = unfoldProgress * Math.PI; // Back face
+                
+            }
+
+            if (isFading) {
+        fadeProgress += 0.01; // Adjust fade speed as needed
+        fadeProgress = THREE.MathUtils.clamp(fadeProgress, 0, 1); // Clamp progress between 0 and 1
+
+        // Apply the fade effect to the video textures
+        cubeGroup.children.forEach((face) => {
+            if (face.material.map instanceof THREE.VideoTexture) {
+                face.material.opacity = 1 - fadeProgress; // Decrease opacity
+                face.material.needsUpdate = true; // Ensure the material is updated
+            }
+        });
+    }
+
+            renderer.render(scene, isInsideView ? perspectiveCamera : orthographicCamera);
+        }
+
+        animate();
+
+        // Update Texture Offset for Dragging Effect
+        function updateTextureOffset() {
+            const maxOffset = 1.0;
+            let offset = THREE.MathUtils.clamp(dragOffsetX, 0, maxOffset);
+            cubeGroup.children[0].material.map.offset.x = offset; // Update the texture offset for the first face
+            cubeGroup.children[0].material.map.needsUpdate = true;
+        }
+
+        // Event Listeners for Dragging
+        renderer.domElement.addEventListener('mousedown', (event) => {
+            isDragging = true;
+            startDragX = event.clientX;
+        });
+
+        renderer.domElement.addEventListener('mousemove', (event) => {
+            if (isDragging) {
+                dragOffsetX = (event.clientX - startDragX) / window.innerWidth;
+                updateTextureOffset();
+            }
+        });
+
+        renderer.domElement.addEventListener('mouseup', () => {
+            isDragging = false;
+        });
+
+        renderer.domElement.addEventListener('touchstart', (event) => {
+            isDragging = true;
+            startDragX = event.touches[0].clientX;
+        });
+
+        renderer.domElement.addEventListener('touchmove', (event) => {
+            if (isDragging) {
+                dragOffsetX = (event.touches[0].clientX - startDragX) / window.innerWidth;
+                updateTextureOffset();
+            }
+        });
+
+        renderer.domElement.addEventListener('touchend', () => {
+            isDragging = false;
+        });
+
+        // Play and Pause video controls
+        const playButton = document.getElementById('playButton');
+        const pauseButton = document.getElementById('pauseButton');
+        playButton.addEventListener('click', () => {
+            video1.play();
+            video2.play();
+            video3.play();
+        });
+        pauseButton.addEventListener('click', () => {
+            video1.pause();
+            video2.pause();
+            video3.pause();
+        });
+
+        // Additional controls
+        const toggleButton = document.getElementById('toggleButton');
+        toggleButton.addEventListener('click', () => {
+            if (!isTransitioning) {
+                isTopDownView = !isTopDownView;
+                transitionProgress = 0;
+                isTransitioning = true;
+                transitionType = 'topDown';
+            }
+        });
+
+        const insideButton = document.getElementById('insideButton');
+        insideButton.addEventListener('click', () => {
+            if (!isTransitioning && !isImmersiveView) {
+                isInsideView = !isInsideView;
+                transitionProgress = 0;
+                isTransitioning = true;
+                transitionType = 'insideCube';
+                insideButton.textContent = isInsideView ? 'OUT' : 'IN';
+            } else if (isImmersiveView) {
+                // If already in immersive view, reset to outside
+                isInsideView = false;
+                isImmersiveView = false;
+                transitionProgress = 0;
+                immersiveTransitionProgress = 0;
+                isTransitioning = true;
+                transitionType = 'insideCube';
+                insideButton.textContent = 'Move Inside Cube';
+            }
+        });
+
+        const rotateButton = document.getElementById('rotateButton');
+        rotateButton.addEventListener('click', () => {
+            isRotating = !isRotating;
+            rotateButton.textContent = isRotating ? '||' : '>';
+        });
+
+        const unfoldButton = document.getElementById('unfoldButton');
+
+        // Start unfolding when the button is pressed
+        unfoldButton.addEventListener('mousedown', () => {
+            if (!isUnfolding) {
+                unfoldProgress = 0; // Reset progress for a new unfold animation
+                isUnfolding = true; // Start unfolding
+            }
+        });
+
+        // Stop unfolding and reset the faces when the button is released
+        unfoldButton.addEventListener('mouseup', () => {
+            isUnfolding = false; // Stop unfolding
+            unfoldProgress = 0; // Reset the progress
+            resetFaces(); // Reset face rotation
+        });
+
+        // Additional event to handle the case when the mouse leaves the button
+        unfoldButton.addEventListener('mouseleave', () => {
+            isUnfolding = false; // Stop unfolding
+            unfoldProgress = 0; // Reset the progress
+            resetFaces(); // Reset face rotation
+        });
+
+        // Function to reset the rotation of the front and back faces
+        function resetFaces() {
+            cubeGroup.children[0].rotation.y = 0; // Front face
+            cubeGroup.children[1].rotation.y = 0; // Back face
+        }
+
+ // Fade Button Controls
+const fadeButton = document.getElementById('fadeButton');
+fadeButton.addEventListener('mousedown', () => {
+    isFading = true;
+    fadeProgress = 0; // Reset the fade progress
+});
+
+fadeButton.addEventListener('mouseup', () => {
+    isFading = false;
+});
+
+fadeButton.addEventListener('mouseleave', () => {
+    isFading = false;
+});
+
+
+
+
+        
+    </script>
+</body>
+</html>
